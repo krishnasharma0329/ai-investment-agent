@@ -1,195 +1,175 @@
-'use client'; // Next.js App Router mein interactivity ke liye client component banana zaroori hai
+"use client";
 
-import { useState } from 'react';
+import { useState } from "react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Search, ShieldAlert, Activity, Database, Target } from "lucide-react";
 
-// TypeScript interfaces jo humare component ko type-safe banati hain
-interface AnalysisResult {
-  company: string;
-  research: string;
-  financials: string;
-  verdict: string;
-}
-
-type StepStatus = 'idle' | 'running' | 'completed' | 'error';
+// Mock Data for Graph
+const mockChartData = [
+  { name: "Jan", price: 150 }, { name: "Feb", price: 165 },
+  { name: "Mar", price: 140 }, { name: "Apr", price: 180 },
+  { name: "May", price: 175 }, { name: "Jun", price: 210 },
+];
 
 export default function Home() {
-  // State Management
-  const [companyName, setCompanyName] = useState('');
+  const [company, setCompany] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  
-  // Real-time step tracking status
-  const [researchStatus, setResearchStatus] = useState<StepStatus>('idle');
-  const [financialsStatus, setFinancialsStatus] = useState<StepStatus>('idle');
-  const [supervisorStatus, setSupervisorStatus] = useState<StepStatus>('idle');
+  const [result, setResult] = useState<any>(null);
 
-  // Backend API call karne ka function
-  const handleAnalyze = async (e: React.FormEvent) => {
+  // Helper function to clean Markdown symbols just in case AI still sends them
+  const cleanText = (text: string) => {
+    if (!text) return "";
+    return text
+      .replace(/\*\*/g, '') // Remove all bold markers
+      .replace(/\*/g, '•'); // Replace single asterisk with clean bullet
+  };
+
+  const runPipeline = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companyName.trim()) return;
-
-    // UI State ko reset aur initialize karna
-    setLoading(true);
-    setError('');
-    setResult(null);
+    if (!company) return;
     
-    // Step 1 active karna
-    setResearchStatus('running');
-    setFinancialsStatus('idle');
-    setSupervisorStatus('idle');
-
+    setLoading(true);
+    setResult(null); // Clear previous results
     try {
-      // Humne backend par simulated delay ya sequential processing rakhi hai
-      // UI pipeline ko smooth dikhane ke liye hum steps ko track karenge
-      const response = await fetch('/api/agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName }),
+      const res = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyName: company }),
       });
-
-      if (!response.ok) throw new Error('Failed to analyze company data');
-
-      const data = await response.json();
-
-      // Jaise hi data aata hai, saare steps sequential order mein complete dikhayenge
-      setResearchStatus('completed');
-      setFinancialsStatus('running');
-      
-      // Chote se break ke baad agla status update (Professional UI UX optimization)
-      setTimeout(() => {
-        setFinancialsStatus('completed');
-        setSupervisorStatus('running');
-        
-        setTimeout(() => {
-          setSupervisorStatus('completed');
-          setResult(data);
-          setLoading(false);
-        }, 800);
-      }, 800);
-
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
-      setResearchStatus('error');
-      setFinancialsStatus('error');
-      setSupervisorStatus('error');
+      const data = await res.json();
+      setResult(data);
+    } catch (error) {
+      console.error("Pipeline failed", error);
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-50 p-6 md:p-12 font-sans selection:bg-teal-500 selection:text-zinc-950">
-      <div className="max-w-6xl mx-auto space-y-10">
-        
-        {/* Header Section */}
-        <header className="border-b border-zinc-800 pb-6 text-center md:text-left">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-zinc-900 border border-zinc-800 text-xs text-teal-400 rounded-full font-mono mb-3">
-            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse"></span>
-            Multi-Agent System Active
-          </div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-r from-zinc-50 via-zinc-200 to-zinc-500 bg-clip-text text-transparent">
-            AI Investment Research Agent
-          </h1>
-          <p className="text-zinc-400 mt-2 text-sm md:text-base max-w-2xl">
-            Autonomous private-equity analysis pipeline powered by LangGraph.js and Gemini Pro.
-          </p>
-        </header>
-
-        {/* Input Form Section */}
-        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl max-w-xl mx-auto md:mx-0">
-          <form onSubmit={handleAnalyze} className="space-y-4">
-            <label className="block text-xs font-mono uppercase tracking-wider text-zinc-400">
-              Target Corporation Name
-            </label>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g., Apple, Tesla, Tata Motors..."
-                disabled={loading}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-teal-500 disabled:opacity-50 transition"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-zinc-50 text-zinc-950 font-medium px-6 py-3 rounded-lg text-sm hover:bg-zinc-200 disabled:opacity-50 transition shadow-md active:scale-95 whitespace-nowrap"
-              >
-                {loading ? 'Analyzing...' : 'Run Pipeline'}
-              </button>
-            </div>
-          </form>
-
-          {/* Real-time Step/Node Tracker Component */}
-          {loading && (
-            <div className="mt-6 border-t border-zinc-800/60 pt-4 space-y-3 font-mono text-xs">
-              <div className="text-zinc-500 uppercase tracking-widest mb-1">Graph Execution State:</div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-300">1. Node_Researcher (Market Data)</span>
-                <span className={researchStatus === 'running' ? 'text-teal-400 animate-pulse' : researchStatus === 'completed' ? 'text-zinc-500' : 'text-zinc-600'}>
-                  {researchStatus === 'running' ? '[PROCESSING]' : researchStatus === 'completed' ? '[DONE]' : '[IDLE]'}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-300">2. Node_Financial_Analyst (Margins)</span>
-                <span className={financialsStatus === 'running' ? 'text-teal-400 animate-pulse' : financialsStatus === 'completed' ? 'text-zinc-500' : 'text-zinc-600'}>
-                  {financialsStatus === 'running' ? '[PROCESSING]' : financialsStatus === 'completed' ? '[DONE]' : '[IDLE]'}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-300">3. Node_Investment_Committee (Verdict)</span>
-                <span className={supervisorStatus === 'running' ? 'text-teal-400 animate-pulse' : supervisorStatus === 'completed' ? 'text-zinc-500' : 'text-zinc-600'}>
-                  {supervisorStatus === 'running' ? '[COMPILING]' : supervisorStatus === 'completed' ? '[DONE]' : '[IDLE]'}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {error && <div className="mt-4 text-red-400 text-xs font-mono">⚠️ Error: {error}</div>}
-        </section>
-
-        {/* Results Workspace Grid */}
-        {result && (
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-            
-            {/* Column 1: Market Research Output */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 flex flex-col justify-between">
-              <div>
-                <div className="text-xs font-mono uppercase tracking-wider text-teal-400 mb-2">Agent_Output_01 // Research</div>
-                <h3 className="text-lg font-bold mb-3 border-b border-zinc-800 pb-2">Market & News Summary</h3>
-                <div className="text-sm text-zinc-300 space-y-2 whitespace-pre-line leading-relaxed">
-                  {result.research}
-                </div>
-              </div>
-            </div>
-
-            {/* Column 2: Financial Metrics Output */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 flex flex-col justify-between">
-              <div>
-                <div className="text-xs font-mono uppercase tracking-wider text-teal-400 mb-2">Agent_Output_02 // Financials</div>
-                <h3 className="text-lg font-bold mb-3 border-b border-zinc-800 pb-2">Financial Analysis & Risks</h3>
-                <div className="text-sm text-zinc-300 space-y-2 whitespace-pre-line leading-relaxed">
-                  {result.financials}
-                </div>
-              </div>
-            </div>
-
-            {/* Column 3: The Supervisor's Executive Verdict */}
-            <div className="bg-zinc-900 border border-teal-900/60 rounded-xl p-6 bg-gradient-to-b from-zinc-900 via-zinc-900 to-teal-950/20 ring-1 ring-teal-500/10">
-              <div className="text-xs font-mono uppercase tracking-wider text-purple-400 mb-2">Agent_Supervisor // Core_Decision</div>
-              <h3 className="text-lg font-bold mb-3 border-b border-zinc-800 pb-2 text-zinc-100">Executive Committee Review</h3>
-              <div className="text-sm text-zinc-200 whitespace-pre-line leading-relaxed bg-zinc-950/60 p-4 border border-zinc-800/80 rounded-lg">
-                {result.verdict}
-              </div>
-            </div>
-
-          </section>
-        )}
-        
+    <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans">
+      
+      {/* HEADER SECTION */}
+      <div className="max-w-6xl mx-auto mb-10 text-center">
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 text-indigo-400">
+          AI Investment Agent
+        </h1>
+        <p className="text-slate-400 text-lg">
+          Autonomous private-equity analysis powered by LangGraph & Groq AI.
+        </p>
       </div>
-    </main>
+
+      {/* SEARCH BAR SECTION */}
+      <div className="max-w-4xl mx-auto mb-12">
+        <form onSubmit={runPipeline} className="relative flex items-center">
+          <Search className="absolute left-4 text-slate-500" size={20} />
+          <input
+            type="text"
+            placeholder="Enter Company Name (e.g., Apple, Tesla)..."
+            className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl py-4 pl-12 pr-32 text-lg outline-none transition-all"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            required
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="absolute right-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-medium transition-all disabled:opacity-50"
+          >
+            {loading ? "Processing..." : "Analyze"}
+          </button>
+        </form>
+      </div>
+
+      {/* VIEW 1: EMPTY STATE */}
+      {!result && !loading && (
+        <div className="max-w-6xl mx-auto mt-16">
+          <h2 className="text-center text-xl text-slate-500 mb-8 font-semibold uppercase tracking-wider">
+            System Architecture
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center shadow-lg">
+              <Database className="mx-auto text-cyan-400 mb-4" size={40} />
+              <h3 className="text-lg font-bold text-white mb-2">1. Researcher Agent</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">Gathers recent news, market controversies, and product updates from the web.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center shadow-lg">
+              <Activity className="mx-auto text-emerald-400 mb-4" size={40} />
+              <h3 className="text-lg font-bold text-white mb-2">2. Financial Analyst</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">Evaluates financial health, typical profit margins, and revenue drivers.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center shadow-lg">
+              <Target className="mx-auto text-indigo-400 mb-4" size={40} />
+              <h3 className="text-lg font-bold text-white mb-2">3. Chief Supervisor</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">Synthesizes data to provide a final Invest/Hold/Avoid verdict with pros & cons.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: LOADING STATE */}
+      {loading && (
+        <div className="text-center py-20 mt-10">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+          <p className="text-indigo-400 font-medium animate-pulse">Running LangGraph Multi-Agent Pipeline...</p>
+        </div>
+      )}
+
+      {/* VIEW 3: RESULTS STATE */}
+      {result && !loading && (
+        <div className="max-w-6xl mx-auto space-y-6">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Graph Card */}
+            <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+              <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
+                <Activity className="text-indigo-400" /> Stock Performance (Simulated)
+              </h2>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={mockChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="name" stroke="#475569" />
+                    <YAxis stroke="#475569" tickFormatter={(value) => `$${value}`} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }} />
+                    <Area type="monotone" dataKey="price" stroke="#818cf8" fill="#4f46e5" fillOpacity={0.2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Verdict Card */}
+            <div className="bg-slate-800 border border-indigo-500/30 rounded-xl p-6 shadow-lg">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-indigo-300">
+                <ShieldAlert size={20} /> Final Verdict
+              </h2>
+              {/* Notice the leading-loose class for spacing and cleanText function */}
+              <div className="text-slate-200 text-sm leading-loose whitespace-pre-wrap overflow-y-auto h-64 pr-2 custom-scrollbar">
+                {cleanText(result.verdict)}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Research Card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+              <h2 className="text-xl font-bold mb-4 text-cyan-400">Market Research</h2>
+              <div className="text-slate-300 text-sm leading-loose whitespace-pre-wrap">
+                {cleanText(result.research)}
+              </div>
+            </div>
+
+            {/* Financials Card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+              <h2 className="text-xl font-bold mb-4 text-emerald-400">Financial Analysis</h2>
+              <div className="text-slate-300 text-sm leading-loose whitespace-pre-wrap">
+                {cleanText(result.financials)}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+    </div>
   );
 }

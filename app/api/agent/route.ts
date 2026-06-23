@@ -1,15 +1,8 @@
 import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import { NextResponse } from "next/server";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatGroq } from "@langchain/groq"; 
 
-// 1. Gemini Model Initialize karna
-const llm = new ChatGoogleGenerativeAI({
-  modelName: "gemini-1.5-flash",
-  temperature: 0.2,
-  apiKey: process.env.GEMINI_API_KEY,
-});
-
-// 2. State (Shared Memory) Define karna
+// 1. Define the AI's Memory (State)
 export const AgentState = Annotation.Root({
   companyName: Annotation<string>(),      
   marketResearch: Annotation<string>(),   
@@ -17,60 +10,74 @@ export const AgentState = Annotation.Root({
   finalVerdict: Annotation<string>(),     
 });
 
+// 2. LAZY INITIALIZATION: Groq Model Setup
+const getModel = () => {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("🚨 Groq API Key is missing in .env file!");
+  }
+
+  return new ChatGroq({
+    apiKey: apiKey,
+    model: "llama-3.3-70b-versatile", // Latest Groq Model
+    temperature: 0.1, // Temperature thoda kam kiya hai for highly factual output
+  });
+};
+
 // 3. NODE 1: Market Researcher
 async function researcherNode(state: typeof AgentState.State) {
-  console.log(`🔍 [Researcher Node] Market analysis starting for: ${state.companyName}`);
+  console.log(`[Node 1] Researching: ${state.companyName}`);
+  const prompt = `You are a financial researcher. For ${state.companyName}, provide exactly 3 concise bullet points covering recent major business updates or product launches. 
+  STRICT RULES: Do NOT use markdown formatting like asterisks (**). Do NOT write any introductory or conversational text (like "Here is the summary"). Just give the bullet points.`;
   
-  const prompt = `You are a top-tier financial researcher. Provide a bulleted summary of recent major business updates, product launches, or market controversies for ${state.companyName}. Be brief and quantitative.`;
-  const response = await llm.invoke(prompt);
-  
+  const response = await getModel().invoke(prompt);
   return { marketResearch: response.content as string };
 }
 
 // 4. NODE 2: Financial Analyst
 async function financialsNode(state: typeof AgentState.State) {
-  console.log(`📊 [Financials Node] Checking balance sheet and stock stats for: ${state.companyName}`);
+  console.log(`[Node 2] Financials for: ${state.companyName}`);
+  const prompt = `You are a financial analyst. For ${state.companyName}, provide exactly 3 concise bullet points on estimated financial health, profit margins, and 1 key risk. 
+  STRICT RULES: Do NOT use markdown formatting like asterisks (**). Do NOT write any introductory text. Just give the exact data.`;
   
-  const prompt = `You are a financial analyst. Provide a brief analysis of the estimated financial health, typical profit margins, and revenue drivers for ${state.companyName}. Mention key risks.`;
-  const response = await llm.invoke(prompt);
-  
+  const response = await getModel().invoke(prompt);
   return { financialMetrics: response.content as string };
 }
 
 // 5. NODE 3: Supervisor / Final Verdict
 async function supervisorNode(state: typeof AgentState.State) {
-  console.log(`🧠 [Supervisor Node] Generating final investment verdict...`);
+  console.log(`[Node 3] Final Verdict for: ${state.companyName}`);
+  const prompt = `Based on the research and financials, provide a final verdict for ${state.companyName}.
+  Format exactly like this, line by line, with NO extra conversational text and NO markdown asterisks:
+
+  VERDICT: [Invest, Hold, or Avoid]
   
-  const prompt = `You are a senior fund manager. Review the following research and financials for ${state.companyName}:
+  PROS: 
+  - [Pro 1]
+  - [Pro 2]
   
-  MARKET RESEARCH:
-  ${state.marketResearch}
+  CONS: 
+  - [Con 1]
+  - [Con 2]`;
   
-  FINANCIAL METRICS:
-  ${state.financialMetrics}
-  
-  Based on this, provide a final investment recommendation (Invest, Hold, or Avoid). List 2 major Pros and 2 major Cons. Format your output clearly.`;
-  
-  const response = await llm.invoke(prompt);
-  
+  const response = await getModel().invoke(prompt);
   return { finalVerdict: response.content as string };
 }
 
-// 6. LangGraph ke saare Nodes ko aapas mein connect karna
+// 6. LangGraph Pipeline Configuration
 const workflow = new StateGraph(AgentState)
   .addNode("researcher", researcherNode)
   .addNode("financials", financialsNode)
   .addNode("supervisor", supervisorNode)
-  // Flow setup: START -> Researcher -> Financials -> Supervisor -> END
   .addEdge(START, "researcher")
   .addEdge("researcher", "financials")
   .addEdge("financials", "supervisor")
   .addEdge("supervisor", END);
 
-// Graph ko compile karna
 const appGraph = workflow.compile();
 
-// 7. API Handler
+// 7. API Route Handler
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -79,16 +86,18 @@ export async function POST(req: Request) {
     if (!companyName) {
       return NextResponse.json({ error: "Company name is required" }, { status: 400 });
     }
+    
+    console.log(`🚀 Starting pipeline for: ${companyName}`);
 
-    // Graph ko execute karna initial state ke sath
     const finalState = await appGraph.invoke({
       companyName: companyName,
       marketResearch: "",
       financialMetrics: "",
       finalVerdict: "",
     });
+    
+    console.log(`✅ Pipeline completed successfully!`);
 
-    // Final compiled response bhejna
     return NextResponse.json({ 
       status: "success",
       company: finalState.companyName,
