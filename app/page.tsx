@@ -4,7 +4,6 @@ import { useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Search, ShieldAlert, Activity, Database, Target } from "lucide-react";
 
-// Mock Data for Graph
 const mockChartData = [
   { name: "Jan", price: 150 }, { name: "Feb", price: 165 },
   { name: "Mar", price: 140 }, { name: "Apr", price: 180 },
@@ -16,12 +15,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
 
-  // Helper function to clean Markdown symbols just in case AI still sends them
   const cleanText = (text: string) => {
     if (!text) return "";
     return text
-      .replace(/\*\*/g, '') // Remove all bold markers
-      .replace(/\*/g, '•'); // Replace single asterisk with clean bullet
+      .replace(/\*\*/g, '')
+      .replace(/\*/g, '•'); 
   };
 
   const runPipeline = async (e: React.FormEvent) => {
@@ -29,7 +27,7 @@ export default function Home() {
     if (!company) return;
     
     setLoading(true);
-    setResult(null); // Clear previous results
+    setResult(null); 
     try {
       const res = await fetch("/api/agent", {
         method: "POST",

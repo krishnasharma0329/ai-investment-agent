@@ -2,7 +2,6 @@ import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import { NextResponse } from "next/server";
 import { ChatGroq } from "@langchain/groq"; 
 
-// 1. Define the AI's Memory (State)
 export const AgentState = Annotation.Root({
   companyName: Annotation<string>(),      
   marketResearch: Annotation<string>(),   
@@ -10,7 +9,6 @@ export const AgentState = Annotation.Root({
   finalVerdict: Annotation<string>(),     
 });
 
-// 2. LAZY INITIALIZATION: Groq Model Setup
 const getModel = () => {
   const apiKey = process.env.GROQ_API_KEY;
 
@@ -20,12 +18,11 @@ const getModel = () => {
 
   return new ChatGroq({
     apiKey: apiKey,
-    model: "llama-3.3-70b-versatile", // Latest Groq Model
-    temperature: 0.1, // Temperature thoda kam kiya hai for highly factual output
+    model: "llama-3.3-70b-versatile", 
+    temperature: 0.1, 
   });
 };
 
-// 3. NODE 1: Market Researcher
 async function researcherNode(state: typeof AgentState.State) {
   console.log(`[Node 1] Researching: ${state.companyName}`);
   const prompt = `You are a financial researcher. For ${state.companyName}, provide exactly 3 concise bullet points covering recent major business updates or product launches. 
@@ -35,7 +32,6 @@ async function researcherNode(state: typeof AgentState.State) {
   return { marketResearch: response.content as string };
 }
 
-// 4. NODE 2: Financial Analyst
 async function financialsNode(state: typeof AgentState.State) {
   console.log(`[Node 2] Financials for: ${state.companyName}`);
   const prompt = `You are a financial analyst. For ${state.companyName}, provide exactly 3 concise bullet points on estimated financial health, profit margins, and 1 key risk. 
@@ -45,7 +41,6 @@ async function financialsNode(state: typeof AgentState.State) {
   return { financialMetrics: response.content as string };
 }
 
-// 5. NODE 3: Supervisor / Final Verdict
 async function supervisorNode(state: typeof AgentState.State) {
   console.log(`[Node 3] Final Verdict for: ${state.companyName}`);
   const prompt = `Based on the research and financials, provide a final verdict for ${state.companyName}.
@@ -65,7 +60,6 @@ async function supervisorNode(state: typeof AgentState.State) {
   return { finalVerdict: response.content as string };
 }
 
-// 6. LangGraph Pipeline Configuration
 const workflow = new StateGraph(AgentState)
   .addNode("researcher", researcherNode)
   .addNode("financials", financialsNode)
@@ -77,7 +71,6 @@ const workflow = new StateGraph(AgentState)
 
 const appGraph = workflow.compile();
 
-// 7. API Route Handler
 export async function POST(req: Request) {
   try {
     const body = await req.json();
