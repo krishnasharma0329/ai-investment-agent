@@ -1,10 +1,10 @@
 # AI Investment Research Agent
 
-**Deployment Link:** [Insert Vercel Link Here]
+**Deployment Link:** https://ai-investment-agent-git-main-krishnasharma0329s-projects.vercel.app/
 
 ## Overview
 
-Nexus AI Investment Agent is a full-stack Next.js application that researches a corporate entity and returns an institutional-grade investment recommendation: Invest, Hold, or Avoid. 
+AI Investment Agent is a full-stack Next.js application that researches a corporate entity and returns an institutional-grade investment recommendation: Invest, Hold, or Avoid. 
 
 Unlike standard single-prompt applications, this system utilizes a strict Multi-Agent pipeline via LangGraph.js. It leverages the high-speed Groq API (LLaMA 3.3) to sequentially synthesize market news, evaluate financial health, and generate a final structured verdict containing:
 * Final Decision (Invest / Hold / Avoid)
