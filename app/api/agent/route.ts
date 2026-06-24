@@ -1,106 +1,101 @@
-import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import { NextResponse } from "next/server";
-import { ChatGroq } from "@langchain/groq"; 
+import { ChatGroq } from "@langchain/groq";
+import { z } from "zod";
 
-export const AgentState = Annotation.Root({
-  companyName: Annotation<string>(),      
-  marketResearch: Annotation<string>(),   
-  financialMetrics: Annotation<string>(), 
-  finalVerdict: Annotation<string>(),     
+// 1. Load API Keys
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+// 2. Native Fetch Helper
+async function fetchFinnhub(endpoint: string) {
+  const response = await fetch(`https://finnhub.io/api/v1${endpoint}&token=${FINNHUB_API_KEY}`);
+  if (!response.ok) throw new Error("Finnhub API request failed");
+  return response.json();
+}
+
+// 3. Define the exact Schema our Frontend expects
+const FrontendSchema = z.object({
+  verdict: z.enum(["Invest", "Hold", "Avoid"]).describe("Final investment decision."),
+  pros: z.array(z.string()).describe("2-3 positive points about the company."),
+  cons: z.array(z.string()).describe("2-3 risk factors or negative points."),
+  research: z.array(z.string()).describe("3 bullet points regarding recent news or market updates."),
+  financials: z.array(z.string()).describe("2 bullet points summarizing financial health."),
 });
 
-const getModel = () => {
-  const apiKey = process.env.GROQ_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("🚨 Groq API Key is missing in .env file!");
-  }
-
-  return new ChatGroq({
-    apiKey: apiKey,
-    model: "llama-3.3-70b-versatile", 
-    temperature: 0.1, 
-  });
-};
-
-async function researcherNode(state: typeof AgentState.State) {
-  console.log(`[Node 1] Researching: ${state.companyName}`);
-  const prompt = `You are a financial researcher. For ${state.companyName}, provide exactly 3 concise bullet points covering recent major business updates or product launches. 
-  STRICT RULES: Do NOT use markdown formatting like asterisks (**). Do NOT write any introductory or conversational text (like "Here is the summary"). Just give the bullet points.`;
-  
-  const response = await getModel().invoke(prompt);
-  return { marketResearch: response.content as string };
-}
-
-async function financialsNode(state: typeof AgentState.State) {
-  console.log(`[Node 2] Financials for: ${state.companyName}`);
-  const prompt = `You are a financial analyst. For ${state.companyName}, provide exactly 3 concise bullet points on estimated financial health, profit margins, and 1 key risk. 
-  STRICT RULES: Do NOT use markdown formatting like asterisks (**). Do NOT write any introductory text. Just give the exact data.`;
-  
-  const response = await getModel().invoke(prompt);
-  return { financialMetrics: response.content as string };
-}
-
-async function supervisorNode(state: typeof AgentState.State) {
-  console.log(`[Node 3] Final Verdict for: ${state.companyName}`);
-  const prompt = `Based on the research and financials, provide a final verdict for ${state.companyName}.
-  Format exactly like this, line by line, with NO extra conversational text and NO markdown asterisks:
-
-  VERDICT: [Invest, Hold, or Avoid]
-  
-  PROS: 
-  - [Pro 1]
-  - [Pro 2]
-  
-  CONS: 
-  - [Con 1]
-  - [Con 2]`;
-  
-  const response = await getModel().invoke(prompt);
-  return { finalVerdict: response.content as string };
-}
-
-const workflow = new StateGraph(AgentState)
-  .addNode("researcher", researcherNode)
-  .addNode("financials", financialsNode)
-  .addNode("supervisor", supervisorNode)
-  .addEdge(START, "researcher")
-  .addEdge("researcher", "financials")
-  .addEdge("financials", "supervisor")
-  .addEdge("supervisor", END);
-
-const appGraph = workflow.compile();
-
+// 4. Next.js App Router POST Handler
 export async function POST(req: Request) {
   try {
+    if (!FINNHUB_API_KEY || !GROQ_API_KEY) {
+      return NextResponse.json(
+        { error: "API keys are missing. Please add them to .env.local" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
-    const { companyName } = body;
+    const companyName = body.company?.trim();
 
     if (!companyName) {
-      return NextResponse.json({ error: "Company name is required" }, { status: 400 });
+      return NextResponse.json({ error: "Company name is required." }, { status: 400 });
     }
+
+    // STEP 1: Resolve Ticker Symbol via Native Fetch
+    const searchData = await fetchFinnhub(`/search?q=${encodeURIComponent(companyName)}`);
+    const bestMatch = searchData.result?.[0]?.symbol || null;
+
+    if (!bestMatch) {
+      return NextResponse.json({ error: `Could not find stock ticker for ${companyName}.` }, { status: 404 });
+    }
+
+    // STEP 2: Fetch Financials and News in Parallel
+    const toDate = new Date();
+    const fromDate = new Date();
+    fromDate.setDate(toDate.getDate() - 30);
     
-    console.log(`🚀 Starting pipeline for: ${companyName}`);
+    const fromStr = fromDate.toISOString().slice(0, 10);
+    const toStr = toDate.toISOString().slice(0, 10);
 
-    const finalState = await appGraph.invoke({
-      companyName: companyName,
-      marketResearch: "",
-      financialMetrics: "",
-      finalVerdict: "",
+    const [profile, news] = await Promise.all([
+      fetchFinnhub(`/stock/profile2?symbol=${bestMatch}`),
+      fetchFinnhub(`/company-news?symbol=${bestMatch}&from=${fromStr}&to=${toStr}`).catch(() => []), 
+    ]);
+
+    const formattedNews = (news || []).slice(0, 5).map((n: any) => n.headline).join(" | ");
+    const financialContext = `
+      Company: ${profile?.name || companyName} (${bestMatch})
+      Industry: ${profile?.finnhubIndustry || "N/A"}
+      Market Cap: ${profile?.marketCapitalization || "N/A"}
+      Recent News: ${formattedNews || "No major recent news."}
+    `;
+
+    // STEP 3: Initialize Groq LLM (FIXED: Changed 'modelName' to 'model')
+    const llm = new ChatGroq({
+      apiKey: GROQ_API_KEY,
+      model: "llama-3.3-70b-versatile", 
+      temperature: 0.1, 
     });
-    
-    console.log(`✅ Pipeline completed successfully!`);
 
-    return NextResponse.json({ 
-      status: "success",
-      company: finalState.companyName,
-      research: finalState.marketResearch,
-      financials: finalState.financialMetrics,
-      verdict: finalState.finalVerdict
-    });
+    const structuredLlm = llm.withStructuredOutput(FrontendSchema);
 
-  } catch (error) {
-    console.error("Agent Workflow Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    // STEP 4: Generate Verdict
+    const result = await structuredLlm.invoke(`
+      You are an elite Private Equity Financial Analyst.
+      Analyze the following live market data and news for ${companyName}.
+      
+      DATA:
+      ${financialContext}
+      
+      Provide a highly professional, objective investment verdict based ONLY on the data provided. 
+      If data is scarce, lean towards 'Hold' or 'Avoid'.
+    `);
+
+    return NextResponse.json(result);
+
+  } catch (error: any) {
+    console.error("Agent Pipeline Error:", error);
+    return NextResponse.json(
+      { error: error.message || "AI Pipeline failed to generate an analysis." },
+      { status: 500 }
+    );
   }
 }
