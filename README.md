@@ -1,38 +1,41 @@
 # AI Investment Research Agent
 
 **Deployment Link:** https://ai-investment-agent-git-main-krishnasharma0329s-projects.vercel.app/
-
 ## Overview
 
-AI Investment Agent is a full-stack Next.js application that researches a corporate entity and returns an institutional-grade investment recommendation: Invest, Hold, or Avoid. 
+AI Investment Research Agent is a full-stack Next.js application designed with an Institutional Quant Terminal aesthetic. It researches a company and returns an actionable investment recommendation.
 
-Unlike standard single-prompt applications, this system utilizes a strict Multi-Agent pipeline via LangGraph.js. It leverages the high-speed Groq API (LLaMA 3.3) to sequentially synthesize market news, evaluate financial health, and generate a final structured verdict containing:
-* Final Decision (Invest / Hold / Avoid)
-* Market Research Summary
-* Financial Metrics & Risks
-* Core Pros & Cons
+The agent bypasses traditional buggy SDKs by using Native Fetch to gather real-time company information and recent news from external financial data sources. It then uses a Groq-hosted LLM through LangChain to generate a strict, structured investment report containing:
+* Final Verdict (Invest / Hold / Avoid)
+* Positive Factors (Pros)
+* Risk Factors (Cons)
+* Live Market Intel (News & Research)
+* Financial Data Stream
 
 ## How to Run
 
 ### Prerequisites
 * Node.js 18+
 * Groq API Key
+* Finnhub API Key
 
 ### Installation
 
 ```bash
 git clone <repository-url>
-cd <repository-directory>
-npm install
+cd ai-investment-agent
+
+npm install --legacy-peer-deps
 
 ```
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env.local` file in the project root:
 
 ```env
-GROQ_API_KEY=your_groq_api_key_here
+GROQ_API_KEY=your_groq_api_key
+FINNHUB_API_KEY=your_finnhub_api_key
 
 ```
 
@@ -43,111 +46,91 @@ npm run dev
 
 ```
 
-Open: `http://localhost:3000`
+Open: [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000)
 
 ## How It Works
 
 ### Architecture
 
 ```text
-User Input (Target Company)
+User
   ↓
-Next.js Frontend (React)
+Next.js Frontend (Quant Terminal UI)
   ↓
-/api/agent (Next.js API Route)
+/api/agent (POST Route)
   ↓
-LangGraph Multi-Agent Pipeline
-  ├── Node 1: Researcher Agent (Gathers news & product updates)
-  ├── Node 2: Financial Analyst (Evaluates margins & health)
-  └── Node 3: Chief Supervisor (Synthesizes data for final decision)
+Native Data Fetcher (Parallel Promises)
+  ├── Company Snapshot (Finnhub)
+  └── Recent News (Finnhub)
+  ↓
+LangChain Agent (Zod Schema)
   ↓
 Groq LLM (llama-3.3-70b-versatile)
   ↓
-Structured JSON Report
-  ↓
-Frontend Dashboard (with Recharts Visualization)
+Structured Investment Report (JSON)
 
 ```
 
 ### Workflow
 
-1. User enters a company name in the Next.js frontend.
-2. The UI triggers a POST request to `/api/agent`.
-3. The LangGraph state object is initialized with the target company name.
-4. **Researcher Node:** The LLM acts as a market researcher, extracting 3 core business updates without conversational filler.
-5. **Financial Node:** The LLM shifts persona to a financial analyst, extracting estimated margins, revenue drivers, and key risks.
-6. **Supervisor Node:** The LLM evaluates the outputs from Node 1 and Node 2 to generate a final, deterministic investment verdict.
-7. The structured JSON response is sent back to the client and rendered dynamically on the dashboard.
+1. User enters a company ticker or name in the Terminal UI.
+2. The frontend sends a request to `/api/agent`.
+3. The backend resolves the ticker and fetches live financial metrics and 30-day news simultaneously to prevent timeouts.
+4. The collected context is injected into a LangChain agent powered by Groq.
+5. The LLM analyzes the data strictly against a Zod schema.
+6. The response is returned as validated JSON.
+7. The frontend displays the final report in a high-contrast, brutalist interface.
 
 ## Tech Stack
 
-* **Frontend:** Next.js, React, Tailwind CSS, Recharts, Lucide Icons
-* **Backend:** Next.js API Routes
-* **AI & Orchestration:** LangGraph.js (`@langchain/langgraph`), Groq SDK (`@langchain/groq`)
+* Next.js (App Router)
+* React
+* LangChain.js
+* Groq
+* Finnhub (via Native Fetch API)
+* Tailwind CSS & Lucide React
+* Zod
 
 ## Key Decisions & Trade-offs
 
-### Next.js Full-Stack Architecture
-
-* **Benefit:** Frontend and backend (API routes) are kept in a single repository, making state management and deployment seamless.
-* **Trade-off:** Serverless functions have execution time limits, requiring an extremely fast LLM (Groq) to prevent timeouts.
-
-### LangGraph vs. Standard LangChain
-
-* **Benefit:** LangGraph provides a cyclical, state-driven workflow. Separating prompts into three distinct nodes (Research -> Financials -> Supervisor) drastically reduced hallucination and improved the reasoning quality compared to a single massive LLM prompt.
-* **Trade-off:** Slightly higher latency as the graph requires three sequential LLM invocations.
-
-### LLM Internal Knowledge vs. Live Financial APIs
-
-* **Benefit:** For this MVP, the agent relies on the LLM's robust internal training data rather than fetching live external API data. This bypasses severe free-tier API rate limits and keeps the total pipeline execution under 5 seconds.
-* **Trade-off:** The data reflects the model's knowledge cutoff date rather than real-time, down-to-the-minute stock prices. (Visual charts on the frontend currently use simulated placeholder structures to demonstrate UI capability).
-
-### Structured Markdown Output
-
-* **Benefit:** Strict system prompting ensures the LLM returns easily parseable bullet points without conversational text.
-* **Trade-off:** Less flexibility in the generated response format, but highly reliable for React rendering.
+* **Next.js Full-Stack Architecture:**
+Frontend and backend are kept in a single project.
+*Benefit:* Faster development and deployment.
+*Trade-off:* API routes share resources with frontend hosting.
+* **Native Fetch vs. Finnhub SDK:**
+Replaced the official Finnhub npm package with native `fetch()`.
+*Benefit:* Eliminated `bind` errors and Next.js App Router compatibility issues, ensuring 100% uptime.
+*Trade-off:* Requires manual URL string formatting for API calls.
+* **Structured Output via Zod:**
+The agent returns validated JSON rather than parsing free-form text.
+*Benefit:* Reliable frontend integration without app crashes.
+*Trade-off:* Slightly restricts the LLM from generating flexible, conversational responses.
+* **Terminal UI Aesthetic:**
+Moved away from standard SaaS templates to a brutalist, monospace interface.
+*Benefit:* Stands out visually and mimics professional Wall Street institutional tools.
+*Trade-off:* Less traditional "consumer-friendly" look.
 
 ## Example Runs
 
-### Apple
+### Apple Inc.
 
-**VERDICT:** Invest
+* **Verdict:** Invest
+* **Pros:** Strong brand ecosystem, massive cash reserves, positive recent news sentiment around AI integration.
+* **Cons/Risks:** Regulatory pressure in the EU, dependence on iPhone upgrade cycles.
+* **Market News:** Apple continues to expand its supply chain outside of China, mitigating geopolitical risks.
+* **Financials:** Industry-leading market capitalization with consistent high-margin service revenue growth.
 
-**PROS:** - Strong brand loyalty and ecosystem retention across devices and services.
+### AMC Entertainment
 
-* Consistent and massive free cash flow generation.
-
-**CONS:** - Heavy reliance on iPhone sales for total revenue.
-
-* Increasing regulatory scrutiny regarding App Store policies.
-
-**Market Research:**
-• Q1 2024 services revenue reached an all-time high.
-• Expanding deeply into the spatial computing market with Vision Pro.
-• Continued supply chain diversification moving away from single-region dependency.
-
-### Tesla
-
-**VERDICT:** Hold
-
-**PROS:** - Market leader in EV technology, software, and charging infrastructure.
-
-* Expanding energy storage and solar business divisions.
-
-**CONS:** - Highly volatile valuation metrics compared to traditional automakers.
-
-* Increasing global competition, particularly from aggressive pricing in the Asian market.
+* **Verdict:** Avoid
+* **Pros:** Strong retail investor backing, high brand visibility.
+* **Cons/Risks:** Severe debt load, declining theater attendance post-pandemic, persistent negative cash flow.
+* **Market News:** Management continues stock dilution to raise capital.
+* **Financials:** Debt-to-equity ratio remains dangerously high, making long-term sustainability questionable.
 
 ## What I Would Improve With More Time
 
-### Live Financial API Integration
-
-Integrate APIs like Finnhub or Alpha Vantage into the "Researcher Node" to fetch real-time P/E ratios, SEC filings, and live stock quotes before sending context to the LLM.
-
-### Retrieval-Augmented Generation (RAG)
-
-Store 10-K and 10-Q financial reports in a vector database (like Pinecone) and allow the agent to query exact historical documentation to back up its verdicts.
-
-### Dynamic UI Graphs
-
-Connect the Recharts frontend component directly to a live stock-market WebSocket to display actual 6-month historical trends corresponding to the user's search query.
+* **Better Data Sources:** Add SEC filings, earnings call transcripts, and analyst ratings to provide deeper research than just company news.
+* **Retrieval-Augmented Generation (RAG):** Store complex financial documents in a vector database (like Pinecone or Supabase) and allow the agent to retrieve relevant evidence before generating recommendations.
+* **Multi-Agent Orchestration:** Implement a LangGraph system to split responsibilities across specialized agents (News Analyst, Financial Analyst, Chief Supervisor) to improve reasoning quality.
+* **Caching & Rate-Limit Handling:** Implement Redis caching for Finnhub responses to improve reliability and reduce API costs.
